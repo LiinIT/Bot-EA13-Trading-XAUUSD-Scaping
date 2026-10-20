@@ -1,17 +1,21 @@
 //+------------------------------------------------------------------+
-//|              Gold_GridStop_DCA_v6.11.mq5                        |
+//|              Gold_GridStop_DCA_v6.15.mq5                        |
 //| Author: HoNgocKhanh                                              |
 //| Based on: 07_SuperScalping_ v5.93                                |
-//| Version: 6.11 - xem CHANGELOG ben duoi                           |
+//| Version: 6.15 - xem CHANGELOG ben duoi                           |
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //| CHANGELOG (moi lan cap nhat deu nang version)                    |
+//| v6.15 - dung bot den het ngay khi lo trong ngay >= InpMaxDailyLossUSD (dong het vi the + xoa lenh cho)
+//| v6.14 - lot DCA theo danh sach InpDCALots: 0.02 -> 0.03 -> 0.05 -> 0.07 (bo InpDCALevels, InpDCALotMultiplier)
+//| v6.13 - chi dat 1 lenh Stop; DCA moi 1.0 gia khi am (toi da 4 muc, ro 0.25 lot)
+//| v6.12 - chi vao lenh khi gia cach MA nhanh <= InpMaxDistanceFromMA (ngoai vung thi khong dat)
 //| v6.11 - sua loi dong BUILD (in "non-string passed")
 //| v6.10 - gong lai theo ro (trailing % dinh), hedge + timeout, loc sideway ADX, thoat dao chieu CUT/FLIP, 2 MA, giam spam log
 //| v6.00 - ban dau: DCA trong vung SL, SL/BE/rolling theo basket
 //+------------------------------------------------------------------+
 #property copyright "HoNgocKhanh"
-#property version   "6.11"
+#property version   "6.15"
 #property strict
 #include <Trade\Trade.mqh>
 CTrade trade;
@@ -28,17 +32,16 @@ input string InpTradeSymbol="XAUUSDm";
 input ulong InpMagicNumber=999889;
 
 input group "=== GRID STOP ==="
-input double InpLotSize=0.01;
+input double InpLotSize=0.02;
 input int InpTotalLimitOrders=1;
-input double InpFirstOrderDistance=0.5;
+input double InpFirstOrderDistance=0.2;
 input double InpStepDistance=0.5;
 
 input group "=== DCA (BASKET) ==="
 input bool InpUseDCA=true;
-input int InpDCALevels=4;
-input double InpDCAStep=2.0;
-input double InpDCALotMultiplier=1.0;
-input double InpMaxBasketLot=0.05;
+input string InpDCALots="0.03,0.05,0.07";
+input double InpDCAStep=1.0;
+input double InpMaxBasketLot=0.17;
 
 input group "=== BASKET TRAILING / TAKE PROFIT ==="
 input bool InpUseBasketTrail=true;
@@ -99,8 +102,12 @@ input ENUM_MA_METHOD InpMAMethod=MODE_EMA;
 input int InpFastMAPeriod=20;
 input int InpSlowMAPeriod=50;
 input ENUM_TIMEFRAMES InpMATimeframe=PERIOD_M1;
+input double InpMaxDistanceFromMA=4.0;
 input bool InpUseMASlope=true;
 input int InpMASlopeBars=3;
+
+input group "=== DAILY LOSS LIMIT ==="
+input double InpMaxDailyLossUSD=150.0;
 
 input group "=== SPREAD ==="
 input double InpMaxSpread=1.50;
@@ -114,6 +121,10 @@ const string FLIP_COMMENT="Gold-FLIP";
 int g_fastMAHandle=INVALID_HANDLE;
 int g_slowMAHandle=INVALID_HANDLE;
 int g_adxHandle=INVALID_HANDLE;
+datetime g_dailyStopDay=0;
+datetime g_nextDailyCheck=0;
+double g_dcaLots[];
+int g_dcaLevels=0;
 datetime g_nextDCAAttempt=0;
 datetime g_nextHedgeAttempt=0;
 bool g_loggedNoDirection=false;
@@ -141,6 +152,34 @@ struct BasketInfo
 };
 
 //+------------------------------------------------------------------+
+//| Doc danh sach lot DCA "0.03,0.05,0.07" -> g_dcaLots              |
+//+------------------------------------------------------------------+
+bool ParseDCALots()
+{
+   string parts[];
+   int count=StringSplit(InpDCALots,',',parts);
+
+   if(count<1 || count>MAX_DCA_LEVELS)
+      return false;
+
+   ArrayResize(g_dcaLots,count);
+
+   for(int i=0;i<count;i++)
+   {
+      StringTrimLeft(parts[i]);
+      StringTrimRight(parts[i]);
+      g_dcaLots[i]=StringToDouble(parts[i]);
+
+      if(g_dcaLots[i]<=0)
+         return false;
+   }
+
+   g_dcaLevels=count;
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
 int OnInit()
 {
    if(InpTradeSymbol=="") return INIT_PARAMETERS_INCORRECT;
@@ -160,8 +199,10 @@ int OnInit()
    if(InpFastMAPeriod<2) return INIT_PARAMETERS_INCORRECT;
    if(InpSlowMAPeriod<=InpFastMAPeriod) return INIT_PARAMETERS_INCORRECT;
    if(InpMASlopeBars<1) return INIT_PARAMETERS_INCORRECT;
+   if(InpMaxDistanceFromMA<0) return INIT_PARAMETERS_INCORRECT;
    if(InpVolumeMA_Period<1) return INIT_PARAMETERS_INCORRECT;
    if(InpMaxOrderAgeSeconds<1) return INIT_PARAMETERS_INCORRECT;
+   if(InpMaxDailyLossUSD<0) return INIT_PARAMETERS_INCORRECT;
    if(InpBreakEvenStart<=0) return INIT_PARAMETERS_INCORRECT;
    if(InpBreakEvenOffset<=0) return INIT_PARAMETERS_INCORRECT;
    if(InpBreakEvenOffset>=InpInitialSLPrice) return INIT_PARAMETERS_INCORRECT;
@@ -194,15 +235,18 @@ int OnInit()
 
    if(InpUseDCA)
    {
-      if(InpDCALevels<1 || InpDCALevels>MAX_DCA_LEVELS) return INIT_PARAMETERS_INCORRECT;
+      if(!ParseDCALots())
+      {
+         PrintFormat("[INIT ERROR] InpDCALots khong hop le: %s",InpDCALots);
+         return INIT_PARAMETERS_INCORRECT;
+      }
       if(InpDCAStep<=0) return INIT_PARAMETERS_INCORRECT;
-      if(InpDCALotMultiplier<1.0) return INIT_PARAMETERS_INCORRECT;
       if(InpMaxBasketLot<InpLotSize) return INIT_PARAMETERS_INCORRECT;
 
-      if(InpDCALevels*InpDCAStep>=InpInitialSLPrice)
+      if(g_dcaLevels*InpDCAStep>=InpInitialSLPrice)
       {
          PrintFormat("[INIT ERROR] DCA %d x %.2f = %.2f phải nhỏ hơn SL %.2f",
-                     InpDCALevels,InpDCAStep,InpDCALevels*InpDCAStep,InpInitialSLPrice);
+                     g_dcaLevels,InpDCAStep,g_dcaLevels*InpDCAStep,InpInitialSLPrice);
          return INIT_PARAMETERS_INCORRECT;
       }
    }
@@ -243,7 +287,7 @@ int OnInit()
    }
 
    Print("==================================================");
-   Print("[EA] GOLD GRID STOP + DCA v6.11");
+   Print("[EA] GOLD GRID STOP + DCA v6.15");
    PrintFormat("[EA] BUILD = %s",TimeToString(__DATETIME__,TIME_DATE|TIME_SECONDS));
    Print("[EA] TREND UP   -> BUY STOP  (DCA = BUY MARKET)");
    Print("[EA] TREND DOWN -> SELL STOP (DCA = SELL MARKET)");
@@ -254,9 +298,9 @@ int OnInit()
    PrintFormat("[EA] MAGIC        = %I64u",InpMagicNumber);
    PrintFormat("[EA] LOT          = %.2f",InpLotSize);
    PrintFormat("[EA] GRID         = %d",InpTotalLimitOrders);
-   PrintFormat("[EA] DCA          = %s | %d x %.2f | x%.2f | MAX LOT %.2f",
-               InpUseDCA?"ON":"OFF",InpDCALevels,InpDCAStep,
-               InpDCALotMultiplier,InpMaxBasketLot);
+   PrintFormat("[EA] DCA          = %s | %d x %.2f | LOTS %s | MAX LOT %.2f",
+               InpUseDCA?"ON":"OFF",g_dcaLevels,InpDCAStep,
+               InpDCALots,InpMaxBasketLot);
    PrintFormat("[EA] HEDGE        = %s | MOVE %.2f in %s | EXIT TOTAL >= %.2f USD | TIMEOUT %d MIN",
                InpUseHedge?"ON":"OFF",InpHedgeTriggerMove,
                EnumToString(InpHedgeTimeframe),InpHedgeExitProfitUSD,InpHedgeMaxMinutes);
@@ -269,15 +313,17 @@ int OnInit()
                InpUseBreakEven?"ON":"OFF",InpBreakEvenStart,InpBreakEvenOffset);
    PrintFormat("[EA] ROLLING SL   = %s | BARS %d",
                InpUseRollingSL?"ON":"OFF",InpSLBars);
-   PrintFormat("[EA] MA FILTER    = %s | %s %d/%d | TF %s | SLOPE %s(%d)",
+   PrintFormat("[EA] MA FILTER    = %s | %s %d/%d | TF %s | SLOPE %s(%d) | MAX DIST %.2f",
                InpUseMAFilter?"ON":"OFF",EnumToString(InpMAMethod),
                InpFastMAPeriod,InpSlowMAPeriod,EnumToString(InpMATimeframe),
-               InpUseMASlope?"ON":"OFF",InpMASlopeBars);
+               InpUseMASlope?"ON":"OFF",InpMASlopeBars,InpMaxDistanceFromMA);
    PrintFormat("[EA] SIDEWAY      = %s | ADX(%d) %s < %.1f -> WAIT",
                InpUseSidewayFilter?"ON":"OFF",InpADXPeriod,
                EnumToString(InpSidewayTimeframe),InpMinADX);
    PrintFormat("[EA] REVERSAL     = %s | CONFIRM %d BARS",
                EnumToString(InpReversalMode),InpReversalConfirmBars);
+   PrintFormat("[EA] DAILY LOSS   = %s | STOP AT -%.2f USD",
+               InpMaxDailyLossUSD>0?"ON":"OFF",InpMaxDailyLossUSD);
    PrintFormat("[EA] SPREAD       = %.2f",tick.ask-tick.bid);
    Print("==================================================");
 
@@ -428,6 +474,9 @@ bool AllowBuyByMA()
    if(tick.ask<=fast)
       return false;
 
+   if(InpMaxDistanceFromMA>0 && tick.ask-fast>InpMaxDistanceFromMA)
+      return false;
+
    if(InpUseMASlope && fast<=fastOld)
       return false;
 
@@ -462,6 +511,9 @@ bool AllowSellByMA()
       return false;
 
    if(tick.bid>=fast)
+      return false;
+
+   if(InpMaxDistanceFromMA>0 && fast-tick.bid>InpMaxDistanceFromMA)
       return false;
 
    if(InpUseMASlope && fast>=fastOld)
@@ -708,7 +760,7 @@ bool GatherBasket(BasketInfo &basket)
 //+------------------------------------------------------------------+
 int NextDCALevel(int dcaMask)
 {
-   for(int level=1;level<=InpDCALevels;level++)
+   for(int level=1;level<=g_dcaLevels;level++)
    {
       if((dcaMask&(1<<level))==0)
          return level;
@@ -746,7 +798,7 @@ bool TryOpenDCA(const BasketInfo &basket,const MqlTick &tick)
    if(basket.lockedSL>0 && (basket.lockedSL-basket.averagePrice)*dir>=0)
       return false;
 
-   double lot=NormalizeVolume(InpLotSize*MathPow(InpDCALotMultiplier,level));
+   double lot=NormalizeVolume(g_dcaLots[level-1]);
 
    if(lot<=0)
       return false;
@@ -1669,8 +1721,121 @@ void PlaceGrid()
 }
 
 //+------------------------------------------------------------------+
+void DeleteAllPendingOrders()
+{
+   for(int i=OrdersTotal()-1;i>=0;i--)
+   {
+      ulong ticket=OrderGetTicket(i);
+
+      if(ticket==0)
+         continue;
+
+      if(OrderGetString(ORDER_SYMBOL)!=InpTradeSymbol)
+         continue;
+
+      if((ulong)OrderGetInteger(ORDER_MAGIC)!=InpMagicNumber)
+         continue;
+
+      ResetLastError();
+
+      if(!trade.OrderDelete(ticket))
+      {
+         PrintFormat("[DAILY LOSS] DELETE ORDER FAILED | Ticket=%I64u | Retcode=%u | %s",
+                     ticket,trade.ResultRetcode(),trade.ResultRetcodeDescription());
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Lai/lo trong ngay (gio server): lenh da dong + vi the dang mo   |
+//+------------------------------------------------------------------+
+double TodayProfit(datetime dayStart)
+{
+   double total=0;
+
+   if(HistorySelect(dayStart,TimeCurrent()))
+   {
+      for(int i=HistoryDealsTotal()-1;i>=0;i--)
+      {
+         ulong ticket=HistoryDealGetTicket(i);
+
+         if(ticket==0)
+            continue;
+
+         if(HistoryDealGetString(ticket,DEAL_SYMBOL)!=InpTradeSymbol)
+            continue;
+
+         if((ulong)HistoryDealGetInteger(ticket,DEAL_MAGIC)!=InpMagicNumber)
+            continue;
+
+         total+=HistoryDealGetDouble(ticket,DEAL_PROFIT)
+               +HistoryDealGetDouble(ticket,DEAL_COMMISSION)
+               +HistoryDealGetDouble(ticket,DEAL_SWAP)
+               +HistoryDealGetDouble(ticket,DEAL_FEE);
+      }
+   }
+
+   for(int i=PositionsTotal()-1;i>=0;i--)
+   {
+      ulong ticket=PositionGetTicket(i);
+
+      if(ticket==0)
+         continue;
+
+      if(PositionGetString(POSITION_SYMBOL)!=InpTradeSymbol)
+         continue;
+
+      if((ulong)PositionGetInteger(POSITION_MAGIC)!=InpMagicNumber)
+         continue;
+
+      total+=PositionGetDouble(POSITION_PROFIT)+PositionGetDouble(POSITION_SWAP);
+   }
+
+   return total;
+}
+
+//+------------------------------------------------------------------+
+//| Lo trong ngay >= InpMaxDailyLossUSD: dong het, dung bot den het ngay |
+//+------------------------------------------------------------------+
+bool IsDailyLossStopped()
+{
+   if(InpMaxDailyLossUSD<=0)
+      return false;
+
+   datetime now=TimeCurrent();
+   datetime dayStart=now-now%86400;
+
+   if(g_dailyStopDay==dayStart)
+      return true;
+
+   if(now<g_nextDailyCheck)
+      return false;
+
+   g_nextDailyCheck=now+1;
+
+   double profit=TodayProfit(dayStart);
+
+   if(profit>-InpMaxDailyLossUSD)
+      return false;
+
+   PrintFormat("[DAILY LOSS] STOP | Today=%.2f <= -%.2f | BOT PAUSED UNTIL NEXT DAY",
+               profit,InpMaxDailyLossUSD);
+
+   ClosePositions(false);
+   DeleteAllPendingOrders();
+
+   g_dailyStopDay=dayStart;
+   g_trailPeakProfit=0;
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
 void OnTick()
 {
+   if(IsDailyLossStopped())
+      return;
+
    ManageBasket();
 
    DeleteExpiredPendingOrders();

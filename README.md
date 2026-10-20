@@ -13,7 +13,7 @@
 ![MT5](https://img.shields.io/badge/MetaTrader-5-blue)
 ![Symbol](https://img.shields.io/badge/Symbol-XAUUSD-gold)
 ![Account](https://img.shields.io/badge/Account-Hedging-orange)
-![Version](https://img.shields.io/badge/Version-6.11-green)
+![Version](https://img.shields.io/badge/Version-6.15-green)
 ![Status](https://img.shields.io/badge/Status-Experimental-red)
 
 </div>
@@ -29,7 +29,7 @@
 
 | File | Mô tả |
 |---|---|
-| [`mt5/13_SuperScalping_DCA.mq5`](mt5/13_SuperScalping_DCA.mq5) | Expert Advisor cho MetaTrader 5 (v6.11) |
+| [`mt5/13_SuperScalping_DCA_v2.mq5`](mt5/13_SuperScalping_DCA_v2.mq5) | Expert Advisor cho MetaTrader 5 (v6.15) |
 
 ---
 
@@ -117,7 +117,7 @@ flowchart TD
 - DCA chỉ **đổi hình dạng kết quả** (thắng nhỏ nhiều, thua lớn ít) chứ không tạo ra lợi thế. Cần tỷ lệ thắng > 73% mới hòa vốn khi lỗ đầy rổ $55 so với chốt $20.
 - Một khoảng ngắn **5 ngày** có thể cho **+$160**: đó là may mắn của một tuần, không đại diện.
 - **Độ trễ lệnh** ảnh hưởng rất lớn (cùng cấu hình +$160 khi không trễ, +$42 khi trễ ngẫu nhiên) vì mỗi lệnh chỉ lãi vài đô.
-- Cấu hình **mặc định hiện tại (v6.11)** là tổng hợp các cải tiến sau các backtest trên và **chưa có backtest 3 tháng riêng**.
+- Cấu hình **mặc định hiện tại (v6.15)** là tổng hợp các cải tiến sau các backtest trên và **chưa có backtest 3 tháng riêng**.
 
 ### Tự đo bằng Strategy Tester
 1. **Ctrl+R** → chọn `13_SuperScalping_DCA` → XAUUSDm → M1.
@@ -129,10 +129,10 @@ flowchart TD
 
 ## 🛠️ Cài đặt
 
-1. MT5 → **File → Open Data Folder → `MQL5/Experts`** → copy `mt5/13_SuperScalping_DCA.mq5` vào.
+1. MT5 → **File → Open Data Folder → `MQL5/Experts`** → copy `mt5/13_SuperScalping_DCA_v2.mq5` vào.
 2. **MetaEditor** (F4) → mở file → **Compile** (F7).
 3. Kéo EA vào chart **XAUUSDm** của tài khoản **hedging** → bật **Algo Trading**.
-4. Kiểm tra tab **Experts** có dòng `GOLD GRID STOP + DCA v6.11` và `BUILD = ...`.
+4. Kiểm tra tab **Experts** có dòng `GOLD GRID STOP + DCA v6.15` và `BUILD = ...`.
 5. **Chạy demo** trước khi dùng bất kỳ khoản tiền thật nào.
 
 > Mỗi lần cập nhật, tác giả nâng version và ghi **CHANGELOG** ở đầu file. Hãy đối chiếu dòng banner trong Experts để chắc chắn đang chạy đúng bản.
@@ -142,12 +142,15 @@ flowchart TD
 | Nhóm | Tham số | Mặc định | Ý nghĩa |
 |---|---|---|---|
 | Symbol | `InpTradeSymbol` / `InpMagicNumber` | XAUUSDm / 999889 | Symbol giao dịch và mã nhận diện lệnh |
-| Grid | `InpLotSize` | 0.01 | Lot mỗi lệnh |
+| Grid | `InpLotSize` | 0.02 | Lot lệnh đầu |
+| Grid | `InpTotalLimitOrders` | 1 | Chỉ đặt 1 lệnh Stop mỗi lần |
 | Grid | `InpFirstOrderDistance` / `InpStepDistance` | 0.5 / 0.5 | Khoảng cách lệnh chờ so với giá |
 | DCA | `InpUseDCA` | true | Bật DCA |
-| DCA | `InpDCALevels` / `InpDCAStep` | 4 / 2.0 | Số tầng thêm và bước giá giữa các tầng |
-| DCA | `InpDCALotMultiplier` | 1.0 | Hệ số lot mỗi tầng (> 1 là martingale, không khuyến nghị) |
-| DCA | `InpMaxBasketLot` | 0.05 | Trần tổng lot của rổ |
+| DCA | `InpDCAStep` | 1.0 | Bước giá giữa các tầng DCA khi lệnh đầu âm |
+| DCA | `InpDCALots` | 0.03,0.05,0.07 | Lot từng tầng DCA (số tầng = số phần tử) → chuỗi 0.02→0.03→0.05→0.07 |
+| DCA | `InpMaxBasketLot` | 0.17 | Trần tổng lot của rổ |
+| Lọc | `InpMaxDistanceFromMA` | 4.0 | Chỉ vào lệnh khi giá cách EMA nhanh ≤ 4 giá (0 = tắt) |
+| An toàn | `InpMaxDailyLossUSD` | 150 | Lỗ trong ngày (giờ server) chạm ngưỡng thì đóng hết và dừng bot đến hết ngày (0 = tắt) |
 | SL | `InpInitialSLPrice` | 15.0 | SL chung cách lệnh đầu (giá) |
 | Gồng lãi | `InpUseBasketTrail` | true | Bật gồng lãi theo đỉnh lãi của rổ |
 | Gồng lãi | `InpBasketTrailStartUSD` / `InpBasketTrailGivebackPct` | 6.0 / 35 | Bắt đầu từ $6, nhường 35% đỉnh |
@@ -165,7 +168,7 @@ flowchart TD
 
 ## 🆚 Khác gì bản `07_SuperScalping_` gốc
 
-| Bản 07 (v5.93) | Bản 13 (v6.11) |
+| Bản 07 (v5.93) | Bản 13 (v6.15) |
 |---|---|
 | Một lệnh tại một thời điểm, SL riêng từng lệnh | **Rổ lệnh** với SL chung và DCA trong vùng SL |
 | SL dời theo BE +3/+4 và rolling 15 nến M1 | Gồng lãi theo **% đỉnh lãi của rổ** (BE/rolling tắt) |
