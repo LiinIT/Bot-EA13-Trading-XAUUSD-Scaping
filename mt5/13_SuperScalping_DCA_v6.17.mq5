@@ -73,19 +73,19 @@ input group "=== INITIAL SL (TINH TU LENH DAU) ==="
 input double InpInitialSLPrice=15.0; // SL cung chung cho ca ro, cach gia vao lenh dau (gia)
 
 input group "=== ROLLING SL 15 M1 ==="
-input bool InpUseRollingSL=false; // bat/tat SL cuon theo day/dinh cua N nen gan nhat
+input bool InpUseRollingSL=true; // bat/tat SL cuon theo day/dinh cua N nen gan nhat
 input ENUM_TIMEFRAMES InpSLTimeframe=PERIOD_M1; // khung thoi gian lay day/dinh cho rolling SL
 input int InpSLBars=15; // so nen gan nhat dung tim day/dinh
 input double InpSLBuffer=0.20; // SL dat ngoai day/dinh them khoang nay (gia)
 input double InpRollingStep=0.30; // chi doi SL khi cai thien it nhat khoang nay (gia)
 
 input group "=== BREAK EVEN / PROFIT START (TINH TU GIA TB) ==="
-input bool InpUseBreakEven=false; // bat/tat dich SL len hoa von khi co lai
+input bool InpUseBreakEven=true; // bat/tat dich SL len hoa von khi co lai
 input double InpBreakEvenStart=4.00; // lai so voi gia TB (gia) de kich hoat break even
 input double InpBreakEvenOffset=3.00; // SL dat o gia TB cong khoang nay (gia)
 
 input group "=== TRAILING SL ==="
-input bool InpUseTrailingSL=false; // bat/tat trailing SL tung lenh
+input bool InpUseTrailingSL=true; // bat/tat trailing SL tung lenh
 input double InpTrailingStart=2.00; // lai so voi gia TB (gia) de bat dau trailing
 input double InpTrailingDistance=0.70; // SL bam sau gia khoang nay (gia)
 input double InpTrailingStep=0.20; // chi doi SL khi cai thien it nhat khoang nay (gia)
@@ -101,8 +101,8 @@ input double InpVolumeMultiplier=2.0; // volume nen hien tai >= TB x he so nay t
 input group "=== MA FILTER ==="
 input bool InpUseMAFilter=true; // bat/tat loc huong bang 2 MA (BUY/SELL chi khi dung xu huong)
 input ENUM_MA_METHOD InpMAMethod=MODE_EMA; // loai MA (EMA, SMA, ...)
-input int InpFastMAPeriod=20; // chu ky MA nhanh
-input int InpSlowMAPeriod=50; // chu ky MA cham, phai lon hon MA nhanh
+input int InpFastMAPeriod=34; // chu ky MA nhanh
+input int InpSlowMAPeriod=89; // chu ky MA cham, phai lon hon MA nhanh
 input ENUM_TIMEFRAMES InpMATimeframe=PERIOD_M1; // khung thoi gian tinh MA
 input double InpMaxDistanceFromMA=4.0; // chi vao lenh khi gia cach MA nhanh <= khoang nay (gia); 0 = tat
 input bool InpUseMASlope=true; // bat/tat bat buoc MA nhanh doc dung huong
