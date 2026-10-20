@@ -29,7 +29,8 @@
 
 | File | Mô tả |
 |---|---|
-| [`mt5/13_SuperScalping_DCA_v2.mq5`](mt5/13_SuperScalping_DCA_v2.mq5) | Expert Advisor cho MetaTrader 5 (v6.15) |
+| [`mt5/13_SuperScalping_DCA.mq5`](mt5/13_SuperScalping_DCA.mq5) | Expert Advisor cho MetaTrader 5, **bản 1 (v6.11)** |
+| [`mt5/13_SuperScalping_DCA_v2.mq5`](mt5/13_SuperScalping_DCA_v2.mq5) | Expert Advisor cho MetaTrader 5 **bản 2 (v6.15)** |
 
 ---
 
