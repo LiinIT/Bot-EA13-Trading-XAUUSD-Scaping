@@ -34,7 +34,8 @@
 | [`mt5/13_SuperScalping_DCA_v6.13.mq5`](mt5/13_SuperScalping_DCA_v6.13.mq5) | v6.13 - 1 lệnh Stop, DCA mỗi 1.0 giá |
 | [`mt5/13_SuperScalping_DCA_v6.14.mq5`](mt5/13_SuperScalping_DCA_v6.14.mq5) | v6.14 - lot DCA theo danh sách 0.02→0.03→0.05→0.07 |
 | [`mt5/13_SuperScalping_DCA_v6.15.mq5`](mt5/13_SuperScalping_DCA_v6.15.mq5) | **Bản 2 (v6.15)** - thêm dừng bot khi lỗ trong ngày |
-| [`mt5/13_SuperScalping_DCA_v6.16.mq5`](mt5/13_SuperScalping_DCA_v6.16.mq5) | **v6.16** - DCA theo khoảng cách liền kề `InpDCAGaps=4,8` (tích lũy 4 và 12 giá), lot `0.03,0.05` (mới nhất) |
+| [`mt5/13_SuperScalping_DCA_v6.16.mq5`](mt5/13_SuperScalping_DCA_v6.16.mq5) | **v6.16** - DCA theo khoảng cách liền kề `InpDCAGaps=4,8` (tích lũy 4 và 12 giá), lot `0.03,0.05` |
+| [`mt5/13_SuperScalping_DCA_v6.17.mq5`](mt5/13_SuperScalping_DCA_v6.17.mq5) | **v6.17** - thêm ghi chú từng input, không đổi logic (mới nhất) |
 
 ---
 
@@ -134,7 +135,7 @@ flowchart TD
 
 ## 🛠️ Cài đặt
 
-1. MT5 → **File → Open Data Folder → `MQL5/Experts`** → copy `mt5/13_SuperScalping_DCA_v6.16.mq5` vào.
+1. MT5 → **File → Open Data Folder → `MQL5/Experts`** → copy `mt5/13_SuperScalping_DCA_v6.17.mq5` vào.
 2. **MetaEditor** (F4) → mở file → **Compile** (F7).
 3. Kéo EA vào chart **XAUUSDm** của tài khoản **hedging** → bật **Algo Trading**.
 4. Kiểm tra tab **Experts** có dòng `GOLD GRID STOP + DCA v6.15` và `BUILD = ...`.
